@@ -3,6 +3,7 @@ import cv2
 from replay_buffer import ReplayBuffer
 import numpy as np
 from duel_Q import DuelQ
+from duel_Q_new import DuelQ_new
 from deep_Q import DeepQ
 import time
 from gym import wrappers
@@ -15,7 +16,7 @@ MONITOR_DIR = LOG_NAME_SAVE + '/monitor/' #the path to save monitor file
 BUFFER_SIZE = 50000
 MINIBATCH_SIZE = 16
 EPSILON_DECAY = 50000
-MIN_OBSERVATION = 20000
+MIN_OBSERVATION = 100
 FINAL_EPSILON = 0.02
 INITIAL_EPSILON = 1.0
 # Number of frames to throw into network
@@ -24,11 +25,11 @@ SAVE_PER_EPOCH = 5000
 INPUT_WIDTH = 80
 INPUT_HEIGHT = 60
 
-class RLBOT(object):
+class RLBOT_new(object):
 
     def __init__(self, mode):
         print ('Creating gym environment...')
-        self.env = gym.make('rlbot-v0')
+        self.env = gym.make('rlbot-v1')
         print ('Created gym environment.')
         # init log file
         if not os.path.exists(MONITOR_DIR):
@@ -42,7 +43,7 @@ class RLBOT(object):
         if mode == "DDQN":
             self.deep_q = DeepQ()
         elif mode == "DQN":
-            self.deep_q = DuelQ()
+            self.deep_q = DuelQ_new()
 
         # A buffer that keeps the last 3 images
         self.process_buffer = []
@@ -57,7 +58,7 @@ class RLBOT(object):
         # black_buffer = map(lambda x: x[1:85, :, np.newaxis], self.process_buffer)
         if (NUM_FRAMES > 1):
             while (len(self.process_buffer) < NUM_FRAMES):
-                s, _, _, _ = self.env.step(-1)
+                s, _, _, _ = self.env.step([-1, -1])
                 self.process_buffer.append(s)
 
             return np.concatenate(self.process_buffer, axis=2)
@@ -72,7 +73,7 @@ class RLBOT(object):
 
         self.env.reset()
         curr_state = self.get_state()
-        predict_movement, predict_q_values = self.deep_q.predict_movement(curr_state, epsilon)
+        predict_movement_angular, predict_movement_linear = self.deep_q.predict_movement(curr_state, epsilon)
 
         print ('Start!')
         while observation_num < num_frames:
@@ -82,16 +83,16 @@ class RLBOT(object):
                 epsilon -= (INITIAL_EPSILON-FINAL_EPSILON)/EPSILON_DECAY
 
             curr_state = self.get_state()
-            predict_movement, predict_q_values = self.deep_q.predict_movement(curr_state, epsilon)
+            predict_movement_angular, predict_movement_linear = self.deep_q.predict_movement(curr_state, epsilon)
 
-            temp_observation, temp_reward, done, _ = self.env.step(predict_movement)
+            temp_observation, temp_reward, done, _ = self.env.step([predict_movement_angular, predict_movement_linear])
             self.process_buffer = self.process_buffer[1:]
             self.process_buffer.append(temp_observation)
 
             total_reward += temp_reward
 
             new_state = self.get_state()
-            self.replay_buffer.add(curr_state, predict_movement, temp_reward, done, new_state)
+            self.replay_buffer.add(curr_state, [predict_movement_angular, predict_movement_linear], temp_reward, done, new_state)
 
             if done:
                 # total_reward += 0.01 * alive_frame
@@ -127,7 +128,7 @@ class RLBOT(object):
             self.env.monitor.start(path, force=True)
         self.env.reset()
         curr_state = self.get_state()
-        predict_movement, predict_q_values = self.deep_q.predict_movement(curr_state, 0)
+        predict_movement_angular, predict_movement_linear = self.deep_q.predict_movement(curr_state, 0)
 
         print ('Start simulation')
         while attempt < total_attempt:
@@ -135,8 +136,8 @@ class RLBOT(object):
             print ('Attempt ' + str(attempt) + "/" + str(total_attempt))
             while not done:
                 state = self.get_state()
-                predict_movement, predict_q_values = self.deep_q.predict_movement(state, 0)
-                observation, reward, done, info = self.env.step(predict_movement)
+                predict_movement_angular, predict_movement_linear = self.deep_q.predict_movement(state, 0)
+                observation, reward, done, info = self.env.step([predict_movement_angular, predict_movement_linear])
                 tot_award += reward
                 self.process_buffer = self.process_buffer[1:]
                 self.process_buffer.append(observation)

@@ -25,7 +25,10 @@ from decimal import *
 # f = map(lambda x: float(x), f)
 #
 # print (convolveArgMax(y, f))
-a = np.empty((5, 5, 5))
-b = [a, a, a]
-c = np.concatenate(b , axis=2)
-print (c.shape)
+
+a = np.array([[[[[1],[2]]]]])
+print a
+print a.shape
+a = a.reshape(1, 1, 1, 2)
+print a
+print a.shape

@@ -11,16 +11,10 @@ from keras.layers.core import Activation, Dropout, Flatten, Dense
 
 # List of hyper-parameters and constants
 DECAY_RATE = 0.99
-BUFFER_SIZE = 40000
-MINIBATCH_SIZE = 64
-TOT_FRAME = 3000000
-EPSILON_DECAY = 1000000
-MIN_OBSERVATION = 5000
-FINAL_EPSILON = 0.05
-INITIAL_EPSILON = 0.1
-NUM_ACTIONS = 3
+NUM_ACTIONS = 5
 TAU = 0.01
-IMAGE_SIZE = 100
+INPUT_WIDTH = 80
+INPUT_HEIGHT = 60
 # Number of frames to throw into network
 NUM_FRAMES = 3
 
@@ -32,7 +26,7 @@ class DeepQ(object):
     def construct_q_network(self):
         # Uses the network architecture found in DeepMind paper
         self.model = Sequential()
-        self.model.add(Conv2D(32, (8, 8), strides=(4, 4), input_shape=(IMAGE_SIZE, IMAGE_SIZE, NUM_FRAMES)))
+        self.model.add(Conv2D(32, (8, 8), strides=(4, 4), input_shape=(INPUT_HEIGHT, INPUT_WIDTH, NUM_FRAMES)))
         self.model.add(Activation('relu'))
         self.model.add(Conv2D(64, (4, 4), strides=(2, 2)))
         self.model.add(Activation('relu'))
@@ -46,7 +40,7 @@ class DeepQ(object):
 
         # Creates a target network as described in DeepMind paper
         self.target_model = Sequential()
-        self.target_model.add(Conv2D(32, (8, 8), strides=(4, 4), input_shape=(IMAGE_SIZE, IMAGE_SIZE, NUM_FRAMES)))
+        self.target_model.add(Conv2D(32, (8, 8), strides=(4, 4), input_shape=(INPUT_HEIGHT, INPUT_WIDTH, NUM_FRAMES)))
         self.target_model.add(Activation('relu'))
         self.target_model.add(Conv2D(64, (4, 4), strides=(2, 2)))
         self.target_model.add(Activation('relu'))
@@ -64,12 +58,12 @@ class DeepQ(object):
     def predict_movement(self, data, epsilon):
         """Predict movement of game controler where is epsilon
         probability randomly move."""
-        q_actions = self.model.predict(data.reshape(1, IMAGE_SIZE, IMAGE_SIZE, NUM_FRAMES), batch_size = 1)
+        q_actions = self.model.predict(data.reshape(1, INPUT_HEIGHT, INPUT_WIDTH, NUM_FRAMES), batch_size = 1)
         opt_policy = np.argmax(q_actions)
         rand_val = np.random.random()
         if rand_val < epsilon:
             opt_policy = np.random.randint(0, NUM_ACTIONS)
-        return opt_policy, q_actions[0, opt_policy]
+        return opt_policy, q_actions
 
     def train(self, s_batch, a_batch, r_batch, d_batch, s2_batch, observation_num):
         """Trains network to fit given parameters"""
@@ -77,16 +71,16 @@ class DeepQ(object):
         targets = np.zeros((batch_size, NUM_ACTIONS))
 
         for i in xrange(batch_size):
-            targets[i] = self.model.predict(s_batch[i].reshape(1, IMAGE_SIZE, IMAGE_SIZE, NUM_FRAMES), batch_size = 1)
-            fut_action = self.target_model.predict(s2_batch[i].reshape(1, IMAGE_SIZE, IMAGE_SIZE, NUM_FRAMES), batch_size = 1)
+            targets[i] = self.model.predict(s_batch[i].reshape(1, INPUT_HEIGHT, INPUT_WIDTH, NUM_FRAMES), batch_size = 1)
+            fut_action = self.target_model.predict(s2_batch[i].reshape(1, INPUT_HEIGHT, INPUT_WIDTH, NUM_FRAMES), batch_size = 1)
             targets[i, a_batch[i]] = r_batch[i]
             if d_batch[i] == False:
                 targets[i, a_batch[i]] += DECAY_RATE * np.max(fut_action)
 
-        loss = self.model.train_on_batch(s_batch, targets)
+        loss = self.model.train_on_batch(s_batch.reshape(batch_size, INPUT_HEIGHT, INPUT_WIDTH, NUM_FRAMES), targets)
 
-        # Print the loss every 10 iterations.
-        if observation_num % 10 == 0:
+        # Print the loss every 100 iterations.
+        if observation_num % 100 == 0:
             print "We had a loss equal to ", loss
 
     def save_network(self, path):
@@ -96,7 +90,7 @@ class DeepQ(object):
 
     def load_network(self, path):
         self.model = load_model(path)
-        print "Succesfully loaded network."
+        print "Succesfully loaded network from " + path
 
     def target_train(self):
         model_weights = self.model.get_weights()
@@ -104,11 +98,3 @@ class DeepQ(object):
         for i in xrange(len(model_weights)):
             target_model_weights[i] = TAU * model_weights[i] + (1 - TAU) * target_model_weights[i]
         self.target_model.set_weights(target_model_weights)
-
-if __name__ == "__main__":
-    print "Haven't finished implementing yet...'"
-    space_invader = SpaceInvader()
-    space_invader.load_network("saved.h5")
-    # print space_invader.calculate_mean()
-    # space_invader.simulate("deep_q_video", True)
-    space_invader.train(TOT_FRAME)

@@ -1,4 +1,6 @@
 from collections import deque
+import random
+import numpy as np
 
 class ReplayBuffer:
     """Constructs a buffer object that stores the past moves
@@ -12,7 +14,7 @@ class ReplayBuffer:
     def add(self, s, a, r, d, s2):
         """Add an experience to the buffer"""
         # S represents current state, a is action,
-        # r is reward, d is whether it is the end, 
+        # r is reward, d is whether it is the end,
         # and s2 is next state
         experience = (s, a, r, d, s2)
         if self.count < self.buffer_size:

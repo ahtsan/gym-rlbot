@@ -1,0 +1,31 @@
+{
+	"env_ip":"127.0.0.1",
+	"cam_id": 0,
+	"height": 236,
+	"max_steps": 500,
+	"test_xy": [
+		[ -320,  180]
+    ],
+	"discrete_actions": [
+		[  20,  0],
+		[  10,  5],
+		[  10, -5],
+		[   0, 10],
+		[   0,-10]
+	],
+	"discrete_angular": [
+		20,
+		10,
+		0,
+		-10,
+		-20
+	],
+	"discrete_linear": [
+		20,
+		0
+	],
+	"continous_actions": {
+		"high": [100, 45, 1],
+		"low":  [0, -45, 0]
+	}
+}
