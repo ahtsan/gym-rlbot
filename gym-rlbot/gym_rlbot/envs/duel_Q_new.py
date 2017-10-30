@@ -1,40 +1,45 @@
 import numpy as np
-import random
 import keras
 from keras.models import load_model, Sequential, Model
 from keras.optimizers import Adam
 from keras.layers.core import Activation, Dropout, Flatten, Dense
+from keras.layers.normalization import BatchNormalization
 from keras.layers import merge, Input, Conv2D
 from keras import backend as K
 from replay_buffer import ReplayBuffer
 
 # List of hyper-parameters and constants
-DECAY_RATE = 0.99
+DECAY_RATE = 0.95
 NUM_ACTIONS_ANGULAR = 5
 NUM_ACTIONS_LINEAR = 2
-TAU = 0.01
 INPUT_WIDTH = 80
 INPUT_HEIGHT = 60
 # Number of frames to throw into network
-NUM_FRAMES = 3
+NUM_FRAMES = 4
 
 class DuelQ_new(object):
     """Constructs the desired deep q learning network"""
     def __init__(self):
         self.construct_q_network()
+        K.set_image_dim_ordering('th')
 
     def construct_q_network(self):
         # Uses the network architecture found in DeepMind paper
         self.model = Sequential()
         input_layer = Input(shape = (INPUT_HEIGHT, INPUT_WIDTH, NUM_FRAMES))
         conv1 = Conv2D(32, (8, 8), strides=(4, 4), activation='relu')(input_layer)
+        # conv1 = BatchNormalization()(conv1)
         conv2 = Conv2D(64, (4, 4), strides=(2, 2), activation='relu')(conv1)
+        # conv2 = BatchNormalization()(conv2)
         conv3 = Conv2D(64, (3, 3), activation = 'relu')(conv2)
+        # conv3 = BatchNormalization()(conv3)
         flatten = Flatten()(conv3)
         fc1 = Dense(512)(flatten)
+        fc1 = Dropout(0.2)(fc1)
         advantage_angular = Dense(NUM_ACTIONS_ANGULAR)(fc1)
         advantage_linear = Dense(NUM_ACTIONS_LINEAR)(fc1)
         fc2 = Dense(512)(flatten)
+        fc2 = Dropout(0.2)(fc2)
         value = Dense(1)(fc2)
         policy_linear = merge([advantage_linear, value], mode = lambda x: x[0]-K.mean(x[0])+K.tile(x[1], (1,1,NUM_ACTIONS_LINEAR)), output_shape = (NUM_ACTIONS_LINEAR,))
         policy_angular = merge([advantage_angular, value], mode = lambda x: x[0]-K.mean(x[0])+K.tile(x[1], (1,1,NUM_ACTIONS_ANGULAR)), output_shape = (NUM_ACTIONS_ANGULAR,))
@@ -56,7 +61,7 @@ class DuelQ_new(object):
         if rand_val < epsilon:
             opt_policy_angular = np.random.randint(0, NUM_ACTIONS_ANGULAR)
             opt_policy_linear = np.random.randint(0, NUM_ACTIONS_LINEAR)
-        return opt_policy_angular, opt_policy_linear
+        return opt_policy_angular, opt_policy_linear, angular_q_actions, linear_q_actions
 
     def train(self, s_batch, a_batch, r_batch, d_batch, s2_batch, observation_num):
         """Trains network to fit given parameters"""
@@ -75,9 +80,9 @@ class DuelQ_new(object):
 
         loss = self.model.train_on_batch(s_batch, [targets_angular, targets_linear])
 
-        # Print the loss every 10 iterations.
-        if observation_num % 100 == 0:
-            print "We had a loss equal to ", loss
+        # # Print the loss every 10 iterations.
+        # if observation_num % 100 == 0:
+        #     print "We had a loss equal to ", loss
 
     def save_network(self, path):
         # Saves model at specified path as h5 file
@@ -92,3 +97,4 @@ class DuelQ_new(object):
     def target_train(self):
         model_weights = self.model.get_weights()
         self.target_model.set_weights(model_weights)
+        print 'Updated target Q network.'

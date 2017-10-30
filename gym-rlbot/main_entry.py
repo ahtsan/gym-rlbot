@@ -17,7 +17,7 @@ parser.add_argument("-v", "--view", action='store_true', help="Display the netwo
 args = parser.parse_args()
 print args
 
-# game_instance = RLBOT(args.network)
+# game_instance = RLBOT_new("DQN")
 game_instance = RLBOT_new("DQN")
 
 if args.load:

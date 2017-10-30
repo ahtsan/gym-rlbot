@@ -107,7 +107,7 @@ if __name__ == '__main__':
     parser.add_argument("-p", "--path", type=str, default='logs/monitor/tmp', help="the path of monitor file")
     parser.add_argument("-f", "--full", action='store_true', help="print the full data plot with lines")
     parser.add_argument("-d", "--dots", action='store_true', help="print the full data plot with dots")
-    parser.add_argument("-a", "--average", type=int, nargs='?', const=100, metavar="N", help="plot an averaged graph using N as average size delimiter. Default = 50")
+    parser.add_argument("-a", "--average", type=int, nargs='?', const=50, metavar="N", help="plot an averaged graph using N as average size delimiter. Default = 50")
     parser.add_argument("-i", "--interpolated", type=int, nargs='?', const=50, metavar="M", help="plot an interpolated graph using M as interpolation amount. Default = 50")
     args = parser.parse_args()
 

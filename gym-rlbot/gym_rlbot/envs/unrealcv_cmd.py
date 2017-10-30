@@ -7,6 +7,7 @@ import PIL.Image
 from msvcrt import getch
 import argparse
 import os
+import StringIO
 
 import math
 import random
@@ -31,17 +32,18 @@ class UnrealCv:
         self.check_connection()
         #client.request('vset /viewmode depth')
         print ('Connected to UE4')
+        client.request('vrun setres 640x480')
 
     def check_connection(self):
         while (client.isconnected() is False):
             print ('UnrealCV server is not running. Please try again')
             client.connect()
-
+    #
     def read_depth(self):
-        cmd = 'vget /camera/{cam_id}/depth png'
+        cmd = 'vget /camera/{cam_id}/depth'
         res = client.request(cmd.format(cam_id=self.cam_id))
         img = PIL.Image.open(StringIO.StringIO(res))
-        img = cv2.resize(np.asarray(img), (img_width, img_height))
+        # img = cv2.resize(np.asarray(img), (img_width, img_height))
         img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
         # img = img.reshape(1, 1, img_width, img_height)
         # img = np.expand_dims(img,axis=0)
@@ -51,6 +53,7 @@ class UnrealCv:
         cmd = 'vget /camera/{cam_id}/depth npy'
         res = client.request(cmd.format(cam_id=self.cam_id))
         depth = np.load(io.BytesIO(res))
+        # depth = self.convert2planedepth(depth)
         depth[depth>100.0] = 0
         #self.show_img(depth,'depth')
         return np.expand_dims(depth,axis=-1)
@@ -60,6 +63,16 @@ class UnrealCv:
         img_dirs = client.request(cmd.format(cam_id=self.cam_id))
         image = cv2.imread(img_dirs)
         return image
+
+    def convert2planedepth(self,PointDepth, f=320):
+        H = PointDepth.shape[0]
+        W = PointDepth.shape[1]
+        i_c = np.float(H) / 2 - 1
+        j_c = np.float(W) / 2 - 1
+        columns, rows = np.meshgrid(np.linspace(0, W - 1, num=W), np.linspace(0, H - 1, num=H))
+        DistanceFromCenter = ((rows - i_c) ** 2 + (columns - j_c) ** 2) ** (0.5)
+        PlaneDepth = PointDepth / (1 + (DistanceFromCenter / f) ** 2) ** (0.5)
+        return PlaneDepth
 
     def get_pose(self):
         cmd = 'vget /camera/{cam_id}/location'
@@ -110,7 +123,7 @@ class UnrealCv:
         #self.notify_ready_for_next_move()
         #time.sleep(0.1)
 
-        return velocity * math.cos(angle / 180.0 * math.pi)
+        return velocity * math.cos(4. * angle / 180.0 * math.pi)
 
     def keyboard(self,key, duration = 0.1):# Up Down Left Right
         cmd = 'vset /action/keyboard {key} {duration}'

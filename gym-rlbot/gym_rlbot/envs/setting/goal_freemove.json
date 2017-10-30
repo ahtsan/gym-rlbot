@@ -1,7 +1,7 @@
 {
 	"env_ip":"127.0.0.1",
 	"cam_id": 0,
-	"height": 236,
+	"height": 166,
 	"max_steps": 500,
 	"test_xy": [
 		[ -320,  180]

@@ -13,14 +13,14 @@ LOG_NAME_SAVE = 'logs'
 MONITOR_DIR = LOG_NAME_SAVE + '/monitor/' #the path to save monitor file
 
 # List of hyper-parameters and constants
-BUFFER_SIZE = 50000
-MINIBATCH_SIZE = 16
-EPSILON_DECAY = 50000
-MIN_OBSERVATION = 100
-FINAL_EPSILON = 0.02
+BUFFER_SIZE = 20000
+MINIBATCH_SIZE = 32
+EXPLORATION_STEP = 20000
+MIN_OBSERVATION = 5000
+FINAL_EPSILON = 0.05
 INITIAL_EPSILON = 1.0
 # Number of frames to throw into network
-NUM_FRAMES = 3
+NUM_FRAMES = 4
 SAVE_PER_EPOCH = 5000
 INPUT_WIDTH = 80
 INPUT_HEIGHT = 60
@@ -73,17 +73,17 @@ class RLBOT_new(object):
 
         self.env.reset()
         curr_state = self.get_state()
-        predict_movement_angular, predict_movement_linear = self.deep_q.predict_movement(curr_state, epsilon)
+        predict_movement_angular, predict_movement_linear, _, _ = self.deep_q.predict_movement(curr_state, epsilon)
 
         print ('Start!')
         while observation_num < num_frames:
 
             # Slowly decay the learning rate
             if epsilon > FINAL_EPSILON and self.replay_buffer.size() >= MIN_OBSERVATION:
-                epsilon -= (INITIAL_EPSILON-FINAL_EPSILON)/EPSILON_DECAY
+                epsilon -=  (INITIAL_EPSILON-FINAL_EPSILON) / EXPLORATION_STEP
 
             curr_state = self.get_state()
-            predict_movement_angular, predict_movement_linear = self.deep_q.predict_movement(curr_state, epsilon)
+            predict_movement_angular, predict_movement_linear, _, _ = self.deep_q.predict_movement(curr_state, epsilon)
 
             temp_observation, temp_reward, done, _ = self.env.step([predict_movement_angular, predict_movement_linear])
             self.process_buffer = self.process_buffer[1:]
@@ -107,7 +107,9 @@ class RLBOT_new(object):
                     print ('Start training.')
                 s_batch, a_batch, r_batch, d_batch, s2_batch = self.replay_buffer.sample(MINIBATCH_SIZE)
                 self.deep_q.train(s_batch, a_batch, r_batch, d_batch, s2_batch, observation_num)
-                self.deep_q.target_train()
+
+                if observation_num % 1000 == 0:
+                    self.deep_q.target_train()
 
             # Save the network every 10000 iterations
             if observation_num % SAVE_PER_EPOCH == 0:
@@ -124,21 +126,64 @@ class RLBOT_new(object):
         done = False
         tot_award = 0
         attempt = 0
-        if save:
-            self.env.monitor.start(path, force=True)
+        # if save:
+        #     self.env.monitor.start(path, force=True)
         self.env.reset()
         curr_state = self.get_state()
-        predict_movement_angular, predict_movement_linear = self.deep_q.predict_movement(curr_state, 0)
+        predict_movement_angular, predict_movement_linear, _, _ = self.deep_q.predict_movement(curr_state, 0)
 
         print ('Start simulation')
+        count = 0
+        f = open("qvalues.txt", "a")
         while attempt < total_attempt:
             tot_award = 0
             print ('Attempt ' + str(attempt) + "/" + str(total_attempt))
             while not done:
+                count += 1
+
                 state = self.get_state()
-                predict_movement_angular, predict_movement_linear = self.deep_q.predict_movement(state, 0)
+                predict_movement_angular, predict_movement_linear, q_angular, q_linear = self.deep_q.predict_movement(state, 0)
+                angular_action = ' '
+                if predict_movement_angular == 0:
+                    angular_action = 'right'
+                elif predict_movement_angular == 1:
+                    angular_action = 'small right'
+                elif predict_movement_angular == 2:
+                    angular_action = 'NO'
+                elif predict_movement_angular == 3:
+                    angular_action = 'small left'
+                else:
+                    angular_action = 'left'
+
+                linear_action = ' '
+                if predict_movement_linear == 0:
+                    linear_action = 'Go'
+                else:
+                    linear_action = 'Stop'
+
+                slow_motion = False
+                if slow_motion:
+                    print ('Angular: ' + str(q_angular) + ', Chosen: ' + str(predict_movement_angular))
+                    print ('Linear: ' + str(q_linear) + ', Chosen: ' + str(predict_movement_linear))
+                    print (angular_action + ' ' + linear_action)
+                    time.sleep(1)
+
+                f.write(str(count) + '\n')
+                f.write('Angular: ' + str(q_angular) + ', Chosen: ' + str(predict_movement_angular) + '\n')
+                f.write('Linear: ' + str(q_linear) + ', Chosen: ' + str(predict_movement_linear) + '\n')
+
+
                 observation, reward, done, info = self.env.step([predict_movement_angular, predict_movement_linear])
                 tot_award += reward
+
+                for i in range(0, len(self.process_buffer)):
+                    img = self.process_buffer[i][:, :, 0]
+                    img = img / np.max(img)
+                    img = img * 255.0
+                    # img = img.astype(int)
+                    # print (img)
+                    cv2.imwrite(str(count)+str(i)+'.png', img)
+
                 self.process_buffer = self.process_buffer[1:]
                 self.process_buffer.append(observation)
             self.env.reset()

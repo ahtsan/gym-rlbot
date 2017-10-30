@@ -1,6 +1,7 @@
 import numpy as np
 import math
 from decimal import *
+import random
 
 # def convolveArgMax(y, f):
 #     np.seterr(divide='ignore', invalid='ignore')
@@ -26,9 +27,7 @@ from decimal import *
 #
 # print (convolveArgMax(y, f))
 
-a = np.array([[[[[1],[2]]]]])
-print a
-print a.shape
-a = a.reshape(1, 1, 1, 2)
-print a
-print a.shape
+for i in range(0, 1000):
+    x = np.random.randint(0, 5)
+    if x == 5:
+        print ('fk')

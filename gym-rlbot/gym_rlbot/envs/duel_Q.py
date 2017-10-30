@@ -1,5 +1,4 @@
 import numpy as np
-import random
 import keras
 from keras.models import load_model, Sequential, Model
 from keras.optimizers import Adam
@@ -11,16 +10,16 @@ from replay_buffer import ReplayBuffer
 # List of hyper-parameters and constants
 DECAY_RATE = 0.99
 NUM_ACTIONS = 5
-TAU = 0.01
 INPUT_WIDTH = 80
 INPUT_HEIGHT = 60
 # Number of frames to throw into network
-NUM_FRAMES = 3
+NUM_FRAMES = 4
 
 class DuelQ(object):
     """Constructs the desired deep q learning network"""
     def __init__(self):
         self.construct_q_network()
+        K.set_image_dim_ordering('th')
 
     def construct_q_network(self):
         # Uses the network architecture found in DeepMind paper
@@ -34,7 +33,8 @@ class DuelQ(object):
         advantage = Dense(NUM_ACTIONS)(fc1)
         fc2 = Dense(512)(flatten)
         value = Dense(1)(fc2)
-        policy = merge([advantage, value], mode = lambda x: x[0]-K.mean(x[0])+K.tile(x[1], (1,1,NUM_ACTIONS)), output_shape = (NUM_ACTIONS,))
+        # advantage + value - mean(average(advantage) )
+        policy = merge([advantage, value], mode = lambda x: x[0] + K.tile(x[1], (1,1,NUM_ACTIONS)) -K.mean(x[0], keepdims=True), output_shape = (NUM_ACTIONS,))
 
         self.model = Model(inputs=[input_layer], outputs=[policy])
         self.model.compile(loss='mse', optimizer=Adam(lr=0.000001))

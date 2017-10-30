@@ -14,12 +14,12 @@ MONITOR_DIR = LOG_NAME_SAVE + '/monitor/' #the path to save monitor file
 # List of hyper-parameters and constants
 BUFFER_SIZE = 50000
 MINIBATCH_SIZE = 16
-EPSILON_DECAY = 50000
-MIN_OBSERVATION = 20000
+EPSILON_DECAY = 20000
+MIN_OBSERVATION = 100
 FINAL_EPSILON = 0.02
 INITIAL_EPSILON = 1.0
 # Number of frames to throw into network
-NUM_FRAMES = 3
+NUM_FRAMES = 4
 SAVE_PER_EPOCH = 5000
 INPUT_WIDTH = 80
 INPUT_HEIGHT = 60

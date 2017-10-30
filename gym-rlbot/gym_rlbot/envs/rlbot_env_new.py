@@ -21,7 +21,7 @@ class RLBOT_base_new(gym.Env):
                 reward_type # distance, bbox, bbox_distance,
                 ):
 
-     self.show = True
+     self.show = False
 
      print ("Reading setting file: ",setting_file)
      self.test = test
@@ -100,7 +100,7 @@ class RLBOT_base_new(gym.Env):
         if self.action_type == 'discrete':
             (angle, velocity) = self.discrete_angular[action_angular], self.discrete_linear[action_linear]
         else:
-            (angle, velocity) = 0, 0
+            (angle, velocity) = None
 
         info['Done'] = False
 
