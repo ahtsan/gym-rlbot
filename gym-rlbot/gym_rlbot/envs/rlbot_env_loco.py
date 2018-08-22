@@ -12,16 +12,22 @@ from operator import itemgetter
 INPUT_WIDTH = 80
 INPUT_HEIGHT = 60
 
-class RLBOT_base_new(gym.Env):
+class Rlbot_env_loco(gym.Env):
    def __init__(self,
                 setting_file,
                 test,               # if True will use the test_xy as start point
+                timeDependent,
                 action_type,  # 'discrete', 'continuous'
                 observation_type, # 'color', 'depth', 'rgbd'
                 reward_type # distance, bbox, bbox_distance,
                 ):
 
      self.show = False
+     self.collision = False
+     self.timeDependent = timeDependent
+     self.target = None
+     # self.dis2target_now= 100
+     # self.isTargetChanged = False
 
      print ("Reading setting file: ",setting_file)
      self.test = test
@@ -33,27 +39,31 @@ class RLBOT_base_new(gym.Env):
      setting = self.load_env_setting(setting_file)
 
      # connect UnrealCV
-     self.unrealcv = UnrealCv(9000, self.cam_id, self.env_ip)
+     self.unrealcv = UnrealCv(9000, self.cam_id, self.env_ip, self.message_handler)
 
      print ("Camera_id: ",self.cam_id);
      print ("Environment ip: ",self.env_ip)
      print ("Observation type: ", observation_type)
      print ("action_type: ",action_type)
      print ("Reward type: ",reward_type)
+     print ("timeDependent: ",str(self.timeDependent))
 
      self.unrealcv.notify_connection()
-     self.unrealcv.declare_step_by_step()
 
      self.count_steps = 0
 
      # action
      if self.action_type == 'discrete':
-         self.action_space = spaces.Discrete(len(self.discrete_angular) * len(self.discrete_linear))
+         self.action_space = spaces.Discrete(len(self.discrete_angular))
      elif self.action_type == 'continuous':
          self.action_space = spaces.Box(low = np.array(self.continous_actions['low']),high = np.array(self.continous_actions['high']))
 
      # get start position
-     current_pose = self.unrealcv.get_pose()
+     self.startPoint = self.unrealcv.get_pose()
+     self.unrealcv.get_target_point()
+
+     while(self.target == None):
+         time.sleep(0.5)
 
      # for reset point generation
      self.trajectory = []
@@ -78,17 +88,26 @@ class RLBOT_base_new(gym.Env):
         )
 
         action_angular = actions[0]
-        action_linear = actions[1]
-        # return state immediately
-        if action_angular == -1:
+        ########################### first time ignore ###########################
+        if action_angular == -8:
+            if self.observation_type == 'depth':
+                state = info['Depth'] = self.unrealcv.read_depth_npy()
+
+            resized_state = cv2.resize(state, (INPUT_WIDTH, INPUT_HEIGHT))
+            resized_state = np.expand_dims(resized_state, axis=2)
+
+            info['Done'] = True
+            return resized_state, 0, info['Done'], info
+        ########################### return state immediately ###########################
+        if action_angular == -9:
             if self.observation_type == 'depth':
                 state = info['Depth'] = self.unrealcv.read_depth_npy()
 
             resized_state = cv2.resize(state, (INPUT_WIDTH, INPUT_HEIGHT))
             resized_state = np.expand_dims(resized_state, axis=2)
             return resized_state, 0, False, info
-        # disconnect UE
-        elif action_angular == -2:
+        ############################ disconnect UE ###########################
+        elif action_angular == -99:
             if self.observation_type == 'depth':
                 state = info['Depth'] = self.unrealcv.read_depth_npy()
 
@@ -97,41 +116,37 @@ class RLBOT_base_new(gym.Env):
             self.unreadcv.notify_disconnection()
             return resized_state, 0, False, info
 
+        ############################## Start ###################################
+
         if self.action_type == 'discrete':
-            (angle, velocity) = self.discrete_angular[action_angular], self.discrete_linear[action_linear]
+            angle = self.discrete_angular[action_angular]
         else:
-            (angle, velocity) = None
+            angle = None
 
         info['Done'] = False
 
         # take action
-        distance_travelled = self.unrealcv.move(velocity, angle)
-
-        # ready = self.unrealcv.get_ready()
-        # while (not ready):
-        #     ready = self.unrealcv.get_ready()
-        # self.unrealcv.reset_ready()
+        distance_travelled = self.unrealcv.move(10, angle, self.timeDependent)
 
         info['Pose'] = self.unrealcv.get_pose()
         # info['Distance'] = self.get_distance(info['Pose'][:3],self.targets_pos)
         if self.reward_type=='distance':
-            info['Reward'] = self.reward_distance(info['Pose'])
-        else:
-            info['Reward'] = distance_travelled / 100
+            # info['Reward'] = self.reward_distance(info['Pose'])
+            # info['Reward'] = distance_travelled / 100
+            if angle == 0:
+                info['Reward'] = 0.01
+            else:
+                info['Reward'] = 0
 
         # info['Direction'] = self.get_direction (info['Pose'],self.targets_pos)
-        info['Collision'] = self.unrealcv.get_collision()
-        self.unrealcv.reset_collision()
+        info['Collision'] = self.isCollided()
 
         # info['Arrival'] = self.unrealcv.get_arrival()
         # self.unrealcv.reset_arrival()
 
         if info['Collision']:
-            info['Reward'] = -10
+            info['Reward'] = -1
             info['Done'] = True
-        # elif info['Arrival']:
-        #     info['Reward'] = 1
-        #     info['Done'] = True
 
         #print ("R: ", str(round(info['Reward'], 3)), " D: ", str(round(info['Distance'], 3)), " A: ", str(round(info['Direction'], 3)))
         self.count_steps += 1
@@ -151,26 +166,24 @@ class RLBOT_base_new(gym.Env):
             state = info['Depth'] = self.unrealcv.read_depth_npy()
 
         if self.show:
+            state = cv2.resize(state, (432, 243))
             cv2.imshow('state', state / np.max(state))
             cv2.waitKey(1)
 
         resized_state = cv2.resize(state, (INPUT_WIDTH, INPUT_HEIGHT))
         resized_state = np.expand_dims(resized_state, axis=2)
         # return np.array([state, np.array([info['Distance']])]), info['Reward'], info['Done'], info
+
         return resized_state, info['Reward'], info['Done'], info
 
    def _reset(self, ):
        self.unrealcv.reset_env()
 
-    #    ready = self.unrealcv.get_ready()
-    #    while (not ready):
-    #        ready = self.unrealcv.get_ready()
-    #    self.unrealcv.reset_ready()
-
        if self.test:
            current_pose = self.reset_from_testpoint()
        else:
-           current_pose = self.unrealcv.get_pose()
+           # current_pose = self.unrealcv.get_pose()
+           current_pose = self.reset_from_startPoint()
 
        if self.observation_type == 'depth':
            state = self.unrealcv.read_depth_npy()
@@ -188,27 +201,47 @@ class RLBOT_base_new(gym.Env):
    def _close(self):
        pass
 
-   # def _get_action_size(self):
-   #     return len(self.action)
+   def message_handler(self, message):
+       if (message == 'collision'):
+           self.collision = True
+       if (message.startswith('nextTarget')):
+           tmp = message.split(':')[1].split(',')
+           self.target = [float(tmp[0]), float(tmp[1])]
+           self.isTargetChanged = True
+
+   def isCollided(self):
+       collided = self.collision
+       self.collision = False
+       return collided
 
    # functions for starting point module
-   def reset_from_testpoint(self):
-       x,y = self.testpoints[self.start_id]
-       z = self.height
-       # noise
-       x += random.uniform(-500, 2000)
-       y += random.uniform(-80, 80)
-       yaw = random.uniform(-45, 45)
+   # def reset_from_testpoint(self):
+   #     x,y = self.testpoints[self.start_id]
+   #     z = self.height
+   #     # noise
+   #     x += random.uniform(-500, 2000)
+   #     y += random.uniform(-80, 80)
+   #     yaw = random.uniform(-45, 45)
+   #
+   #     self.unrealcv.set_position(x, y, z)
+   #     self.unrealcv.set_rotation(0, yaw, 0)
+   #     return [x,y,z,yaw]
 
-       self.unrealcv.set_position(x, y, z)
-       self.unrealcv.set_rotation(0, yaw, 0)
-       return [x,y,z,yaw]
+   def reset_from_startPoint(self):
+      x, y, z, yaw = self.startPoint
+      # noise
+      # x += random.uniform(-500, 2000)
+      # y += random.uniform(-80, 80)
+      # yaw = random.uniform(-45, 45)
 
-   # def get_distance(self,current,target):
-   #  #    error = abs(np.array(target)[:2] - np.array(current)[:2])# only x and y
-   #  #    distance = math.sqrt(sum(error * error))
-   #     distance = target[0] - current[0]
-   #     return distance
+      self.unrealcv.set_position(x, y, z)
+      self.unrealcv.set_rotation(0, yaw, 0)
+      return [x,y,z,yaw]
+
+   def get_distance(self, current, target):
+       dis = abs(np.array(target)[:2] - np.array(current)[:2])# only x and y
+       distance = math.sqrt(sum(dis * dis))
+       return distance
 
    # def get_direction(self,current_pose,target_pose):
    #     y_delt = target_pose[1] - current_pose[1]
@@ -235,11 +268,17 @@ class RLBOT_base_new(gym.Env):
    #     #range is (-180,180]
    #     return difference
 
-   # def reward_distance(self, dis2target_now):
-   #      reward = (self.dis2target_now - dis2target_now[0]) / max(self.dis2target_now, 100)
-   #      self.dis2target_now = dis2target_now[0]
-   #
-   #      return reward
+   def reward_distance(self, current_pose):
+       if self.isTargetChanged:
+           self.dis2target_now= self.get_distance(current_pose, self.target)
+           self.isTargetChanged = False
+           reward = 0.05
+       else:
+           distance = self.get_distance(current_pose, self.target)
+           reward = (self.dis2target_now - distance) / 100
+           self.dis2target_now = distance
+
+       return reward
 
    def load_env_setting(self,filename):
        f = open(self.get_settingpath(filename))
@@ -259,10 +298,8 @@ class RLBOT_base_new(gym.Env):
        self.env_ip = setting['env_ip']
        self.max_steps = setting['max_steps']
        self.height = setting['height']
-       self.testpoints = setting['test_xy']
-       self.discrete_actions = setting['discrete_actions']
+       # self.testpoints = setting['test_xy']
        self.discrete_angular = setting['discrete_angular']
-       self.discrete_linear = setting['discrete_linear']
        self.continous_actions = setting['continous_actions']
 
        return setting

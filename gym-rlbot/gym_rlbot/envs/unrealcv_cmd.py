@@ -17,9 +17,9 @@ img_height = 60
 
 class UnrealCv:
     def __init__(self, port = 9000, cam_id = 0,
-                 ip = '127.0.0.1'):
+                 ip = '127.0.0.1', message_handler=None):
         global client
-        client = unrealcv.Client((ip, port))
+        client = unrealcv.Client((ip, port), message_handler)
         self.cam_id = cam_id
         self.rotation = (0, 0, 0)
         self.position = [0, 0, 0]
@@ -38,6 +38,9 @@ class UnrealCv:
         while (client.isconnected() is False):
             print ('UnrealCV server is not running. Please try again')
             client.connect()
+
+    def get_target_point(self):
+        self.keyboard("h")
     #
     def read_depth(self):
         cmd = 'vget /camera/{cam_id}/depth'
@@ -54,7 +57,8 @@ class UnrealCv:
         res = client.request(cmd.format(cam_id=self.cam_id))
         depth = np.load(io.BytesIO(res))
         # depth = self.convert2planedepth(depth)
-        depth[depth>100.0] = 0
+        depth[depth>10.0] = 10.0
+        # depth = depth / np.max(depth)
         #self.show_img(depth,'depth')
         return np.expand_dims(depth,axis=-1)
 
@@ -95,102 +99,51 @@ class UnrealCv:
         client.request(cmd.format(cam_id=self.cam_id, pitch=pitch, yaw=yaw, roll=roll))
         self.rotation = (float(roll), float(yaw), float(pitch))
 
-    def move(self, velocity, angle):
+    def move(self, velocity, angle, timeDependent):
 
-        # continuous motion
-        # if (velocity == 1):
-        # 	self.keyboard('w')
-        # if (angle == 1):
-        # 	self.keyboard('a')
-        # if (angle == -1):
-        # 	self.keyboard('d')
-        # if (velocity == -1):
-        # 	self.keyboard('s')
+        # timeDependent motion
+        if timeDependent:
+            if (velocity == 1):
+            	self.keyboard('w')
+            if (angle == 1):
+            	self.keyboard('a')
+            if (angle == -1):
+            	self.keyboard('d')
+            if (angle == 0):
+                self.keyboard('p')
+            if (velocity == 0):
+            	self.keyboard('s')
 
-        # step by step
-        yaw_exp = (self.rotation[1] + angle) % 360
-        delt_x = velocity * math.cos(yaw_exp / 180.0 * math.pi)
-        delt_y = velocity * math.sin(yaw_exp / 180.0 * math.pi)
-        x_exp = self.position[0] + delt_x
-        y_exp = self.position[1] + delt_y
-        z_exp = self.position[2]
+            return 0
+        else:
+            # step by step
+            yaw_exp = (self.rotation[1] + angle) % 360
+            delt_x = velocity * math.cos(yaw_exp / 180.0 * math.pi)
+            delt_y = velocity * math.sin(yaw_exp / 180.0 * math.pi)
+            x_exp = self.position[0] + delt_x
+            y_exp = self.position[1] + delt_y
+            z_exp = self.position[2]
 
-        if angle != 0 :
-            self.set_rotation(0, yaw_exp, 0)
+            if angle != 0 :
+                self.set_rotation(0, yaw_exp, 0)
 
-        self.set_position(x_exp, y_exp, z_exp)
+            self.set_position(x_exp, y_exp, z_exp)
 
-        #self.notify_ready_for_next_move()
-        #time.sleep(0.1)
-
-        return velocity * math.cos(4. * angle / 180.0 * math.pi)
+            return velocity * math.cos(4. * angle / 180.0 * math.pi)
 
     def keyboard(self,key, duration = 0.1):# Up Down Left Right
         cmd = 'vset /action/keyboard {key} {duration}'
         return client.request(cmd.format(key = key,duration = duration))
 
-    def wait_until_ready(self):
-        # wait for UE to be ready
-        ready = self.get_ready()
-        while (not ready):
-           ready = self.get_ready()
-        self.reset_ready()
-
-    def wait_until_receive_action(self):
-        # get the current steering command
-        self.ask_for_action()
-        action = self.get_action()
-        while (action < 0):
-            action = self.get_action()
-        self.reset_action()
-
-        return action
-
     # list of high level TCP commands
-    def get_ready(self):
-        return client.is_ready()
-
-    def reset_ready(self):
-        client.reset_ready()
-
-    def ask_for_action(self):
-        self.keyboard('n')
-
-    def get_action(self):
-        return client.get_action()
-
-    def reset_action(self):
-        client.reset_action()
-
-    def set_ready(self):
-        self.keyboard('b')
-
     def notify_connection(self):
         self.keyboard('c')
 
     def notify_disconnection(self):
         self.keyboard('l')
 
-    def declare_tick_by_tick(self):
-        self.keyboard('t')
-
-    def declare_step_by_step(self):
-        self.keyboard('p')
-
     def reset_env(self):
         self.keyboard('r')
-
-    def get_collision(self):
-        return client.is_collided()
-
-    def reset_collision(self):
-        client.reset_collision()
-
-    def get_arrival(self):
-        return client.is_arrived()
-
-    def reset_arrival(self):
-        client.reset_arrival()
 
     def turn_left(self):
         self.keyboard('a')

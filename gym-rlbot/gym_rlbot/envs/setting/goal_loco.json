@@ -1,0 +1,15 @@
+{
+	"env_ip":"127.0.0.1",
+	"cam_id": 0,
+	"height": 166,
+	"max_steps": 200,
+	"discrete_angular": [
+		-1,
+		0,
+		1
+	],
+	"continous_actions": {
+		"high": [100, 45, 1],
+		"low":  [0, -45, 0]
+	}
+}
